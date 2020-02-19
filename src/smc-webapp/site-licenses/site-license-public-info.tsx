@@ -16,11 +16,12 @@ interface Props {
 
 interface State {
   info?: Info;
-  loading: boolean;
+  err?: string;
+  loading?: boolean;
 }
 
 export class SiteLicensePublicInfo extends Component<Props, State> {
-  private mounted: boolean = true;
+  private mounted: boolean = false;
 
   constructor(props, state) {
     super(props, state);
@@ -32,10 +33,22 @@ export class SiteLicensePublicInfo extends Component<Props, State> {
     this.mounted = false;
   }
 
-  private async fetch_info(): Promise<void> {
-    let info = await site_license_public_info(this.props.license_id);
-    if (!this.mounted) return;
-    this.setState({ info, loading: false });
+  componentWillMount() {
+    this.mounted = true;
+  }
+
+  private async fetch_info(force: boolean = false): Promise<void> {
+    if (this.mounted) {
+      this.setState({ loading: true });
+    }
+    try {
+      let info = await site_license_public_info(this.props.license_id, force);
+      if (!this.mounted) return;
+      this.setState({ info, loading: false });
+    } catch (err) {
+      if (!this.mounted) return;
+      this.setState({ err: `${err}`, loading: false });
+    }
   }
 
   private render_expires(): Rendered {
@@ -97,12 +110,47 @@ export class SiteLicensePublicInfo extends Component<Props, State> {
     return this.props.upgrades != null && this.props.upgrades.size > 0;
   }
 
-  private run_limit(): string {
-    if (!this.state.info) return "";
+  private render_run_limit(): Rendered {
+    if (!this.state.info) return;
     if (!this.state.info.run_limit) {
-      return "to an unlimited number of simultaneous running projects";
+      return (
+        <li>
+          This license can be applied to an unlimited number of simultaneous
+          running projects.
+        </li>
+      );
     }
-    return `to up to ${this.state.info.run_limit} simultaneous running projects`;
+    return (
+      <li>
+        This license can be applied to up to {this.state.info.run_limit}{" "}
+        simultaneous running projects.
+      </li>
+    );
+  }
+
+  private render_running(): Rendered {
+    if (!this.state.info) return;
+    return (
+      <li>
+        Currently {this.state.info.running}{" "}
+        {this.state.info.running == 1 ? "project is" : "projects are"} using
+        this license.
+      </li>
+    );
+  }
+
+  private render_overall_limit(): Rendered {
+    if (!this.state.info) return;
+    if (!this.state.info.run_limit) {
+      return (
+        <span>to an unlimited number of simultaneous running projects</span>
+      );
+    }
+    return (
+      <span>
+        to up to {this.state.info.run_limit} simultaneous running projects
+      </span>
+    );
   }
 
   private render_what_license_provides_overall(): Rendered {
@@ -110,7 +158,7 @@ export class SiteLicensePublicInfo extends Component<Props, State> {
     if (!this.state.info.upgrades) return;
     return (
       <div>
-        Provides the following upgrades {this.run_limit()}
+        Provides the following upgrades {this.render_overall_limit()}
         <DisplayUpgrades
           upgrades={scale_by_display_factors(fromJS(this.state.info.upgrades))}
           style={{
@@ -135,37 +183,62 @@ export class SiteLicensePublicInfo extends Component<Props, State> {
       // component not being used in the context of a specific project.
       return this.render_what_license_provides_overall();
     }
-    let run_limit = this.run_limit();
-    if (run_limit) {
-      run_limit = "This license can be applied " + run_limit;
-    }
+    let provides: Rendered;
     if (!this.provides_upgrades()) {
       if (!this.state.info) return;
-      return (
-        <div>
-          Currently providing no upgrades - you probably need to{" "}
-          <a onClick={() => this.restart_project()}>restart your project</a>{" "}
-          (it's also possible that the license limit has been reached).{" "}
-          {run_limit}
-        </div>
+      if (
+        !this.state.info.run_limit ||
+        this.state.info.running < this.state.info.run_limit
+      ) {
+        provides = (
+          <>
+            <li>Currently providing no upgrades to this project. </li>
+            <li>
+              <Icon name="warning" />{" "}
+              <a onClick={() => this.restart_project()}>Restart this project</a>{" "}
+              to use the upgrades provided by this license.
+            </li>
+          </>
+        );
+      } else {
+        provides = (
+          <>
+            <li>Currently providing no upgrades to this project.</li>
+            <li>
+              <Icon name="warning" /> This license is already being used to
+              upgrade {this.state.info.running} other running projects, which is
+              the limit. If possible, stop one of those projects, then{" "}
+              <a onClick={() => this.restart_project()}>
+                restart this project.
+              </a>
+            </li>
+          </>
+        );
+      }
+    } else {
+      if (this.props.upgrades == null) throw Error("make typescript happy");
+      provides = (
+        <li>
+          Currently providing the following{" "}
+          {plural(this.props.upgrades.size, "upgrade")}:
+          <DisplayUpgrades
+            upgrades={scale_by_display_factors(this.props.upgrades)}
+            style={{
+              border: "1px solid #ddd",
+              padding: "0 15px",
+              backgroundColor: "white",
+              margin: "5px 15px"
+            }}
+          />
+        </li>
       );
     }
-    if (this.props.upgrades == null) throw Error("make typescript happy");
     return (
-      <div>
-        Currently providing the following{" "}
-        {plural(this.props.upgrades.size, "upgrade")}:
-        <DisplayUpgrades
-          upgrades={scale_by_display_factors(this.props.upgrades)}
-          style={{
-            border: "1px solid #ddd",
-            padding: "0 15px",
-            backgroundColor: "white",
-            margin: "5px 15px"
-          }}
-        />{" "}
-        {run_limit}
-      </div>
+      <ul>
+        {provides}
+        {this.render_run_limit()}
+        {this.render_running()}
+      </ul>
     );
   }
 
@@ -195,6 +268,10 @@ export class SiteLicensePublicInfo extends Component<Props, State> {
     }
   }
 
+  private render_refresh_button(): Rendered {
+    return <Button onClick={() => this.fetch_info(true)}>Refresh</Button>;
+  }
+
   private render_remove_button(): Rendered {
     if (!this.props.project_id) return;
     const extra = this.provides_upgrades() ? (
@@ -218,24 +295,39 @@ export class SiteLicensePublicInfo extends Component<Props, State> {
         okText={"Yes"}
         cancelText={"Cancel"}
       >
-        <Button style={{ float: "right" }}>Remove License...</Button>
+        <Button>Remove License...</Button>
       </Popconfirm>
     );
+  }
+
+  private render_err(): Rendered {
+    if (this.state.err) {
+      return (
+        <div>
+          <br />
+          {this.state.err}
+        </div>
+      );
+    }
   }
 
   public render(): Rendered {
     const message = (
       <div>
-        {this.render_remove_button()}
+        <Button.Group style={{ float: "right" }}>
+          {this.render_refresh_button()}
+          {this.render_remove_button()}
+        </Button.Group>
         <Icon name="key" /> {this.render_body()}
         <br />
         {this.render_id()}
         {this.render_upgrades()}
+        {this.render_err()}
       </div>
     );
     return (
       <Alert
-        style={{ marginTop: "5px" }}
+        style={{ marginTop: "5px", minHeight: "48px" }}
         message={message}
         type={this.get_type()}
       />
