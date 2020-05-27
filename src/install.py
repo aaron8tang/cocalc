@@ -13,7 +13,7 @@ SRC = os.path.split(os.path.realpath(__file__))[0]
 # Only use sudo if not running as root already (this avoids having to install sudo)
 import getpass
 if getpass.getuser() != 'root':
-    SUDO = "sudo "
+    SUDO = "sudo env PYTHONPATH=$PYTHONPATH PATH=$PATH "
 else:
     SUDO = ""
 
@@ -35,6 +35,7 @@ def cmd(s, error=True):
     if os.system(s) and error:
         sys.exit(1)
     elapsed = time.time() - t0
+    print("------------------------------current cmd is:"+s+"------------------")
     print("TOTAL TIME: %.1f seconds" % elapsed)
     return elapsed
 
@@ -45,13 +46,13 @@ def pull():
 
 
 def install_pyutil():
-    cmd(SUDO + "pip2 install --upgrade ./smc_pyutil")
+    cmd(SUDO + "pip install --upgrade ./smc_pyutil")
 
 
 def install_sagews():
     if os.system('which sage') == 0:
         cmd("sage -pip install --upgrade ./smc_sagews")
-    cmd(SUDO + "pip2 install --upgrade ./smc_sagews")  # as a fallback
+    cmd(SUDO + "pip install --upgrade ./smc_sagews")  # as a fallback
 
 
 def install_project():
@@ -59,23 +60,29 @@ def install_project():
 
     # global install, hence no "npm ci" (!)
     for pkg in ['coffeescript', 'forever']:
-        c = f"npm --loglevel=warn --unsafe-perm=true --progress=false install --upgrade {pkg} -g"
+        c = f"npm --loglevel=verbose --unsafe-perm=true --progress=true install --upgrade {pkg} -g"
         cmd(SUDO + c)
 
     pkgs = ['./smc-project', './smc-webapp', './smc-util-node', './smc-util']
 
     # TODO switch to use npm ci to install these (which doesn't exist for global installs, AFAIU)
     def build_op(pkg):
-        c = f"npm --loglevel=warn --unsafe-perm=true --progress=false install {pkg} -g"
+        c = f"npm --loglevel=verbose --unsafe-perm=true --progress=true install {pkg} -g"
         return cmd(SUDO + c)
-
+    
+    sum_time =0
+    sum_time=sum_time+build_op('./smc-project')
+    sum_time=sum_time+build_op('./smc-webapp')
+    sum_time=sum_time+build_op('./smc-util-node')
+    total=sum_time+build_op('./smc-util')
+    '''
     with ThreadPoolExecutor(max_workers=WORKERS) as executor:
         total = sum(_ for _ in executor.map(build_op, pkgs))
-        print(f"TOTAL PROJECT PKG BUILD TIME: {total:.1f}s")
+    '''
+    print(f"TOTAL PROJECT PKG BUILD TIME: {total:.1f}s")
 
     # UGLY; hard codes the path -- TODO: fix at some point.
-    cmd("cd /usr/lib/node_modules/smc-project/jupyter && %s npm --loglevel=warn ci --unsafe-perm=true --progress=false --upgrade"
-        % SUDO)
+    cmd(F"cd /usr/lib/node_modules/smc-project/jupyter && {SUDO} npm --loglevel=warn ci --unsafe-perm=true --progress=false --upgrade")
 
     # At least run typescript...
     # TODO: currently this errors somewhere in building something in node_modules in smc-webapp, since I can't get
@@ -119,14 +126,21 @@ def install_webapp(*args):
 
         # npm ci for using pkg lock file
         def build_op(path):
-            return cmd(f"cd {path} && npm --loglevel=warn --progress=false ci")
+            return cmd(f"cd {path} && {SUDO} npm --loglevel=warn --progress=false ci")
 
+        total = 0
+        total = total + build_op('smc-webapp')
+        total = total + build_op('smc-webapp/jupyter')
+        total = total + build_op('.')
+        total = total + build_op('smc-util')
+        '''
         with ThreadPoolExecutor(max_workers=WORKERS) as executor:
             total = sum(_ for _ in executor.map(build_op, paths))
-            print(f"TOTAL WEBAPP BUILD TIME: {total:.1f}s")
+        '''
+        print(f"TOTAL WEBAPP BUILD TIME: {total:.1f}s")
 
         # react static step must come *before* webpack step
-        cmd("update_react_static")
+        # cmd("update_react_static")
 
         # download compute environment information
         if os.environ.get('CC_COMP_ENV') == 'true':
@@ -161,7 +175,8 @@ def install_webapp(*args):
         print(
             f"Building {wtype} webpack -- this should take up to {est} minutes"
         )
-        cmd(f"npm --loglevel=warn --progress=false run webpack-{wtype}")
+#incorrect        cmd(f"cd ../.. && npm --loglevel=verbose --progress=false run webpack-{wtype}")
+        cmd(f"npm --loglevel=verbose --progress=false run webpack-{wtype}")
         nothing = False
 
     if 'pull' == action:
@@ -196,16 +211,28 @@ def install_primus():
 def install_all(compute=False, web=False):
     if compute or web:
         # also contains compute server right now (will refactor later)
+        print("installing hub--------------------------------------------------------------------------")
         install_hub()
     if compute:
+        print("installing pyutil--------------------------------------------------------------------------")
         install_pyutil()
+        print("installing sagews--------------------------------------------------------------------------")
         install_sagews()
+        print("installing project--------------------------------------------------------------------------")
         install_project()
     if web:
+        print("installing webapp--------------------------------------------------------------------------")
         install_webapp()
 
 
 def main():
+    cmd('sudo rm smc-project/node_modules/ -rf')
+    cmd('sudo rm smc-project/jupyter/node_modules/ -rf')
+    cmd('sudo rm smc-webapp/node_modules/ -rf')
+    cmd('sudo rm smc-webapp/jupyter/node_modules/ -rf')
+    cmd('sudo rm smc-util/node_modules/ -rf')
+    cmd('sudo rm smc-util-node/node_modules/ -rf')
+
     parser = argparse.ArgumentParser(
         description="Install components of CoCalc into the system")
     subparsers = parser.add_subparsers(help='sub-command help')

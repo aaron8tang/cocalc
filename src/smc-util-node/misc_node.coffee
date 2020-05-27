@@ -34,9 +34,9 @@ winston = require('winston')
 async   = require('async')
 path    = require('path')
 
-misc = require('smc-util/misc')
+misc = require('../smc-util/misc')
 {walltime, defaults, required, to_json} = misc
-message = require('smc-util/message')
+message = require('../smc-util/message')
 
 exports.SALVUS_HOME = exports.SMC_ROOT = SMC_ROOT = process.env.SMC_ROOT
 
@@ -633,7 +633,7 @@ run_jQuery = (cb) ->
 
 # http://api.jquery.com/jQuery.parseHTML/ (expanded behavior in version 3+)
 exports.sanitize_html = (html, cb, keepScripts = true, keepUnsafeAttributes = true) ->
-    {sanitize_html_attributes} = require('smc-util/misc')
+    {sanitize_html_attributes} = require('../smc-util/misc')
     run_jQuery ($) ->
         sani = $($.parseHTML('<div>' + html + '</div>', null, keepScripts))
         if not keepUnsafeAttributes
@@ -660,7 +660,7 @@ if exports.SALVUS_HOME?
     # this is used by the webapp (via webpack.config and the hub)
     # the purpose is, that both of them have to know where the final directory of the mathjax root is
 
-    exports.MATHJAX_LIB      = 'smc-webapp/node_modules/mathjax'
+    exports.MATHJAX_LIB      = '../smc-webapp/node_modules/mathjax'
     mathjax_package_json     = path.resolve(exports.SALVUS_HOME, "#{exports.MATHJAX_LIB}", 'package.json')
     # if the line below causes an exception, there is no mathjax or at the wrong location (should be in MATHJAX_LIB)
     # without that information here, the jupyter notebook can't work

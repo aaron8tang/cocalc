@@ -2,7 +2,7 @@
 
 import os, socket, time
 
-os.chdir(os.environ['SALVUS_ROOT'])
+#os.chdir(os.environ['SALVUS_ROOT'])
 
 
 def cmd(s):

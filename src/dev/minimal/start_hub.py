@@ -12,7 +12,7 @@ if 'TMUX' in os.environ: # see https://github.com/sagemathinc/cocalc/issues/563
 
 util.chdir()
 
-cmd = "cd ../../ && . smc-env &&  service_hub.py --dev --foreground --hostname=0.0.0.0 --port=8000 --share_port=0 --proxy_port=0 --gap=0 start"
+cmd = "cd ../../ && ./smc-env && service_hub.py --dev --foreground --hostname=0.0.0.0 --port=8000 --share_port=0 --proxy_port=0 --gap=0 start"
 
 util.cmd(cmd)
 
